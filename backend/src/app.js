@@ -9,6 +9,7 @@ import authRoutes from './modules/auth/routes.js'
 import bookRoutes from './modules/books/routes.js'
 import ticketRoutes from './modules/tickets/routes.js'
 import { classifyPendingTickets } from './ai/classifier.js'
+import eventRoutes from './modules/events/routes.js'
 import adminRoutes from './modules/admin/routes.js'
 import aiAssistRoutes from './modules/aiAssist/routes.js'
 import healthRoutes from './modules/health/routes.js'
@@ -19,7 +20,7 @@ export async function buildApp() {
     logger: { level: config.isProduction ? 'info' : 'debug' },
   })
 
-  await app.register(cors, { origin: config.corsOrigin })
+  await app.register(cors, { origin: config.corsOrigins })
   await app.register(errorsPlugin)
   await app.register(dbPlugin)
   await app.register(authPlugin)
@@ -32,6 +33,7 @@ export async function buildApp() {
   await app.register(ticketRoutes, { prefix: '/api' })
   await app.register(adminRoutes, { prefix: '/api' })
   await app.register(aiAssistRoutes, { prefix: '/api' })
+  await app.register(eventRoutes, { prefix: '/api' })
 
   // Pick up tickets left unclassified by a crash. Not awaited: the server should
   // start accepting requests straight away.
