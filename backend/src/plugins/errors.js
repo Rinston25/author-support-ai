@@ -21,6 +21,14 @@ async function errorsPlugin(fastify) {
       })
     }
 
+    // Client mistakes raised by Fastify itself (malformed JSON, empty body with a
+    // JSON content-type, unsupported media type...) are 4xx, not server bugs.
+    if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+      return reply.status(error.statusCode).send({
+        error: { code: 'BAD_REQUEST', message: 'The request could not be processed: ' + error.message, details: [] },
+      })
+    }
+
     // Anything else is a bug: log it fully, tell the client nothing specific.
     request.log.error(error)
     return reply.status(500).send({
