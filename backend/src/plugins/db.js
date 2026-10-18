@@ -1,10 +1,7 @@
 import fp from 'fastify-plugin'
 import pg from 'pg'
 import { config } from '../config.js'
-
-// Return DATE columns as plain 'YYYY-MM-DD' strings. The default converts them to
-// JS Dates in the server's timezone, which can shift the day.
-pg.types.setTypeParser(1082, (value) => value)
+import '../db/pgTypes.js'
 
 // A single shared pool, available everywhere as fastify.db
 async function dbPlugin(fastify) {

@@ -3,6 +3,7 @@ import { withTransaction } from '../../lib/transaction.js'
 import { classifyTicket } from '../../ai/classifier.js'
 import { publishEvent } from '../events/eventBus.js'
 import { findBookForAuthor } from '../books/repository.js'
+import { deleteDraft } from '../../ai/draftRepository.js'
 import {
   insertTicket, insertMessage, insertAttachments, listTicketsForAuthor, findTicketForAuthor,
   lockTicketForAuthor, listPublicMessages, listAttachments, touchTicketAfterAuthorMessage,
@@ -92,6 +93,8 @@ export async function addAuthorMessage(fastify, user, ticketId, body) {
       ticketId, senderUserId: user.userId, senderRole: 'author', body: cleanBody,
     })
     const newStatus = await touchTicketAfterAuthorMessage(client, ticketId)
+    // The saved AI draft answered the previous message, not this one
+    await deleteDraft(client, ticketId)
     return { message, previousStatus: ticket.status, newStatus }
   })
 

@@ -10,6 +10,7 @@ import bookRoutes from './modules/books/routes.js'
 import ticketRoutes from './modules/tickets/routes.js'
 import { classifyPendingTickets } from './ai/classifier.js'
 import adminRoutes from './modules/admin/routes.js'
+import aiAssistRoutes from './modules/aiAssist/routes.js'
 import healthRoutes from './modules/health/routes.js'
 
 // Builds the app without starting it, so tests can import it directly.
@@ -30,6 +31,7 @@ export async function buildApp() {
   await app.register(bookRoutes, { prefix: '/api' })
   await app.register(ticketRoutes, { prefix: '/api' })
   await app.register(adminRoutes, { prefix: '/api' })
+  await app.register(aiAssistRoutes, { prefix: '/api' })
 
   // Pick up tickets left unclassified by a crash. Not awaited: the server should
   // start accepting requests straight away.

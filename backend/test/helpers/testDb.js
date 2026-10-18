@@ -1,4 +1,5 @@
 import pg from 'pg'
+import '../../src/db/pgTypes.js'
 
 // DB-backed tests run against the local seeded database and clean up after
 // themselves. When no DATABASE_URL is set they are skipped, not failed.

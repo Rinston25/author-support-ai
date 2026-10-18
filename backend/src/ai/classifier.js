@@ -23,7 +23,7 @@ export function validateClassification(input) {
   }
 }
 
-async function classifyWithAi(fastify, ticket) {
+export async function classifyWithAi(fastify, ticket) {
   const request = buildClassifyRequest({
     subject: ticket.subject, description: ticket.description, bookStatus: ticket.bookStatus,
   })
