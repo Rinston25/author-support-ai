@@ -1,4 +1,4 @@
-# Local Postgres only. The app itself runs with npm scripts.
+# Local Postgres only. Host port 5433 avoids clashing with a locally installed Postgres on 5432.
 services:
   db:
     image: postgres:16
@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: bookleaf
       POSTGRES_DB: bookleaf
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 volumes:
