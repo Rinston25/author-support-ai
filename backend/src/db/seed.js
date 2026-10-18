@@ -87,7 +87,7 @@ const demoTickets = [
     bookId: 'BK002',
     subject: 'Can I update my book description?',
     description: 'My book is already live. Can I still change the description shown on Amazon?',
-    status: 'closed', category: 'isbn_metadata', priority: 'low',
+    status: 'closed', category: 'general_inquiry', priority: 'low',
     reasoning: 'Routine description update request.',
     hoursAgo: 200, assignedToAdmin: 'ops@bookleaf.com',
     replies: [{
