@@ -14,3 +14,6 @@ export const CATEGORIES = Object.keys(CATEGORY_LABELS)
 export const PRIORITIES = ['critical', 'high', 'medium', 'low']
 
 export const TICKET_STATUSES = ['open', 'in_progress', 'resolved', 'closed']
+
+// Royalty policy: pending amounts below this roll over to the next quarter
+export const MINIMUM_PAYOUT_RUPEES = 1000
