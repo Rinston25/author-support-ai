@@ -4,16 +4,16 @@ import Anthropic from '@anthropic-ai/sdk'
 // drafter) goes through call(), so timeout, retry, circuit breaker and usage
 // logging are applied consistently and can't be forgotten.
 
-export const AI_TIMEOUT_MS = 15_000
+// The per-call timeout (AI_TIMEOUT_MS, default 15s) is set on the SDK client in createSdk().
 const MAX_RETRIES = 2 // so at most 3 attempts per call
 const BASE_BACKOFF_MS = 500
 const MAX_RETRY_WAIT_MS = 10_000
 const BREAKER_FAILURE_LIMIT = 3 // consecutive failed calls before we stop trying
 const BREAKER_OPEN_MS = 60_000
 
-// Every AI failure becomes an AiError with a short code, so callers can fall
+// Every AI failure becomes an AiUnavailableError with a short code, so callers can fall
 // back without caring which SDK error it was.
-export class AiError extends Error {
+export class AiUnavailableError extends Error {
   constructor(code, message) {
     super(message)
     this.code = code
@@ -31,7 +31,7 @@ function isRetryable(error) {
   return error.status === 429 || error.status >= 500
 }
 
-function toAiErrorCode(error) {
+function toAiUnavailableErrorCode(error) {
   if (error instanceof Anthropic.APIConnectionTimeoutError) return 'AI_TIMEOUT'
   if (error instanceof Anthropic.APIConnectionError) return 'AI_NETWORK_ERROR'
   if (error.status === 429) return 'AI_RATE_LIMITED'
@@ -57,9 +57,19 @@ export function createAiClient({
 }) {
   let consecutiveFailures = 0
   let circuitOpenUntil = 0
+  let trialInFlight = false
+
+  // closed    = normal
+  // open      = 60s pause after 3 failures; calls are refused without touching the API
+  // half_open = the pause is over; exactly ONE trial call is allowed through.
+  //             Success closes the circuit, failure opens it again for another 60s.
+  function getCircuitState() {
+    if (consecutiveFailures < BREAKER_FAILURE_LIMIT) return 'closed'
+    return now() < circuitOpenUntil ? 'open' : 'half_open'
+  }
 
   function isCircuitOpen() {
-    return now() < circuitOpenUntil
+    return getCircuitState() === 'open'
   }
 
   function recordSuccess() {
@@ -102,8 +112,21 @@ export function createAiClient({
 
   // params = the Messages API body without `model` (system, messages, tools, max_tokens...)
   async function call({ purpose, ticketId, params }) {
-    if (!sdk) throw new AiError('AI_NOT_CONFIGURED', 'ANTHROPIC_API_KEY is not set')
-    if (isCircuitOpen()) throw new AiError('AI_CIRCUIT_OPEN', 'AI calls are paused after repeated failures')
+    if (!sdk) throw new AiUnavailableError('AI_NOT_CONFIGURED', 'ANTHROPIC_API_KEY is not set')
+    const circuitState = getCircuitState()
+    if (circuitState === 'open' || (circuitState === 'half_open' && trialInFlight)) {
+      throw new AiUnavailableError('AI_CIRCUIT_OPEN', 'AI calls are paused after repeated failures')
+    }
+    const isTrial = circuitState === 'half_open'
+    if (isTrial) trialInFlight = true
+    try {
+      return await callWithRetries({ purpose, ticketId, params })
+    } finally {
+      if (isTrial) trialInFlight = false
+    }
+  }
+
+  async function callWithRetries({ purpose, ticketId, params }) {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       const startedAt = now()
@@ -115,22 +138,22 @@ export function createAiClient({
         // it against the circuit breaker, and don't retry the same prompt.
         if (message.stop_reason === 'refusal') {
           await logUsage({ purpose, ticketId, usage: message.usage, latencyMs, errorCode: 'AI_REFUSED' })
-          throw new AiError('AI_REFUSED', 'The model declined this request')
+          throw new AiUnavailableError('AI_REFUSED', 'The model declined this request')
         }
 
         await logUsage({ purpose, ticketId, usage: message.usage, latencyMs })
         recordSuccess()
         return message
       } catch (error) {
-        if (error instanceof AiError) throw error
+        if (error instanceof AiUnavailableError) throw error
 
-        const code = toAiErrorCode(error)
+        const code = toAiUnavailableErrorCode(error)
         await logUsage({ purpose, ticketId, latencyMs: now() - startedAt, errorCode: code })
 
         const hasAttemptsLeft = attempt < MAX_RETRIES
         if (!isRetryable(error) || !hasAttemptsLeft) {
           recordFailure()
-          throw new AiError(code, `AI call failed (${code})`)
+          throw new AiUnavailableError(code, `AI call failed (${code})`)
         }
 
         // Exponential backoff (500ms, 1s...) plus jitter so many clients don't retry in lockstep
@@ -140,22 +163,27 @@ export function createAiClient({
     }
   }
 
+  function isEnabled() {
+    return Boolean(sdk)
+  }
+
   function getStatus() {
     return {
-      configured: Boolean(sdk),
+      configured: isEnabled(),
       model,
+      circuit: getCircuitState(),
       circuitOpen: isCircuitOpen(),
       consecutiveFailures,
       reopensAt: isCircuitOpen() ? new Date(circuitOpenUntil).toISOString() : null,
     }
   }
 
-  return { call, getStatus }
+  return { call, getStatus, isEnabled }
 }
 
 // Real SDK client. maxRetries is 0 because we do our own retries above, with
 // backoff we can see, log and test.
-export function createSdk(apiKey) {
+export function createSdk(apiKey, timeoutMs) {
   if (!apiKey) return null
-  return new Anthropic({ apiKey, timeout: AI_TIMEOUT_MS, maxRetries: 0 })
+  return new Anthropic({ apiKey, timeout: timeoutMs, maxRetries: 0 })
 }

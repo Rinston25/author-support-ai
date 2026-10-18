@@ -15,5 +15,9 @@ export const config = {
   // The AI key is optional on purpose: the app must still run without it.
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
   aiModel: process.env.AI_MODEL || 'claude-haiku-5-5',
+  aiTimeoutMs: Number(process.env.AI_TIMEOUT_MS || 15000),
+  // Per-million-token prices, only used to estimate cost on the usage endpoint
+  aiPriceInputPerMtok: Number(process.env.AI_PRICE_INPUT_PER_MTOK || 0.1),
+  aiPriceOutputPerMtok: Number(process.env.AI_PRICE_OUTPUT_PER_MTOK || 0.5),
   isProduction: process.env.NODE_ENV === 'production',
 }

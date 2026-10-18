@@ -1,9 +1,9 @@
 import { CATEGORIES, PRIORITIES } from '../lib/constants.js'
 import { publishEvent } from '../modules/events/eventBus.js'
-import { AiError } from './aiClient.js'
+import { AiUnavailableError } from './aiClient.js'
 import { fallbackClassify } from './fallbackClassifier.js'
 import { buildClassifyRequest, CLASSIFY_TOOL_NAME } from './prompts/classifyPrompt.js'
-import { findTicketForClassification, saveClassification } from './classificationRepository.js'
+import { findTicketForClassification, saveClassification, listPendingTicketIds } from './classificationRepository.js'
 
 const MAX_REASONING_WORDS = 25
 
@@ -31,15 +31,16 @@ async function classifyWithAi(fastify, ticket) {
 
   const toolCall = message.content.find((block) => block.type === 'tool_use' && block.name === CLASSIFY_TOOL_NAME)
   const result = validateClassification(toolCall?.input)
-  if (!result) throw new AiError('AI_INVALID_OUTPUT', 'Model output failed validation')
+  if (!result) throw new AiUnavailableError('AI_INVALID_OUTPUT', 'Model output failed validation')
   return result
 }
 
 // Runs after the 201 has been sent. Always ends with a saved classification:
 // AI if it works, keyword rules if it does not. The ticket never stays stuck.
-export async function classifyTicket(fastify, ticketId) {
+// `force` lets an admin's "reclassify" overwrite values they set by hand.
+export async function classifyTicket(fastify, ticketId, { force = false } = {}) {
   const ticket = await findTicketForClassification(fastify.db, ticketId)
-  if (!ticket) return
+  if (!ticket) return null
 
   let result
   let source
@@ -47,14 +48,30 @@ export async function classifyTicket(fastify, ticketId) {
     result = await classifyWithAi(fastify, ticket)
     source = 'ai'
   } catch (error) {
-    // AiError = expected (outage, no key, bad output); anything else is a bug worth seeing
-    if (!(error instanceof AiError)) fastify.log.error({ err: error, ticketId }, 'unexpected classifier error')
+    // AiUnavailableError = expected (outage, no key, bad output); anything else is a bug worth seeing
+    if (!(error instanceof AiUnavailableError)) fastify.log.error({ err: error, ticketId }, 'unexpected classifier error')
     fastify.log.warn({ ticketId, reason: error.code || 'UNEXPECTED' }, 'using fallback classifier')
     result = fallbackClassify(ticket.subject, ticket.description)
     source = 'fallback'
   }
 
-  const saved = await saveClassification(fastify.db, ticketId, { ...result, source })
-  // No category/priority in the event: authors receive events for their own tickets
-  publishEvent({ type: 'ticket.classified', ticketId, authorId: saved.authorId, data: {} })
+  const saved = await saveClassification(fastify.db, ticketId, { ...result, source }, { force })
+  // Admins only: the author never sees categories, priorities or AI results
+  publishEvent({ type: 'ticket.classified', ticketId, authorId: saved.authorId, audience: 'admins', data: { source } })
+  publishEvent({ type: 'ticket.updated', ticketId, authorId: saved.authorId, audience: 'admins', data: { classified: true } })
+  return { ...result, source }
+}
+
+// Called once when the server is ready: picks up tickets whose classification
+// never finished (the process stopped between "201 sent" and "classified").
+export async function classifyPendingTickets(fastify) {
+  const ticketIds = await listPendingTicketIds(fastify.db)
+  for (const ticketId of ticketIds) {
+    try {
+      await classifyTicket(fastify, ticketId)
+    } catch (error) {
+      fastify.log.error({ err: error, ticketId }, 'startup classification failed')
+    }
+  }
+  if (ticketIds.length > 0) fastify.log.info({ count: ticketIds.length }, 'classified pending tickets at startup')
 }

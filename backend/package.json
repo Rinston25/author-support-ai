@@ -12,7 +12,7 @@
     "db:migrate": "node --env-file=.env src/db/migrate.js",
     "db:seed": "node --env-file=.env src/db/seed.js",
     "db:reset": "node --env-file=.env src/db/migrate.js --reset && node --env-file=.env src/db/seed.js",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --env-file=.env --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

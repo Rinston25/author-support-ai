@@ -3,6 +3,7 @@ import { hasPlaceholders } from '../../lib/placeholders.js'
 import { buildRoyaltySummary } from '../../lib/royaltyCalendar.js'
 import { withTransaction } from '../../lib/transaction.js'
 import { publishEvent } from '../events/eventBus.js'
+import { classifyTicket } from '../../ai/classifier.js'
 import { findBooksByAuthor } from '../books/repository.js'
 import { insertMessage, listAttachments } from '../tickets/repository.js'
 import {
@@ -188,4 +189,12 @@ export async function addNote(db, ticketId, adminId, body) {
   // Admins only: the author's stream must never learn that a note exists
   publishEvent({ type: 'ticket.updated', ticketId, authorId: ticket.authorId, audience: 'admins', data: { note: true } })
   return { note }
+}
+
+// Re-runs the classifier. It keeps values an admin set by hand unless force is true.
+export async function reclassify(fastify, ticketId, force) {
+  const ticket = await findTicketById(fastify.db, ticketId)
+  if (!ticket) throw notFound('TICKET_NOT_FOUND', 'Ticket not found')
+  await classifyTicket(fastify, ticketId, { force })
+  return getTicketDetail(fastify.db, ticketId)
 }

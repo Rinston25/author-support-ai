@@ -343,3 +343,18 @@ export const listUsersSchema = {
     403: standardErrors[403],
   },
 }
+
+export const reclassifySchema = {
+  tags: ['AI'],
+  summary: 'Re-run the AI classifier on a ticket',
+  description: 'Uses the keyword rules if the AI is unavailable. Category or priority set by an admin is kept unless force is true.',
+  security,
+  params: ticketIdParams,
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { force: { type: 'boolean', default: false, description: 'Also overwrite values set by an admin' } },
+    examples: [{ force: false }],
+  },
+  response: ticketDetailResponse,
+}

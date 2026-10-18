@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import Anthropic from '@anthropic-ai/sdk'
-import { createAiClient, AiError } from '../src/ai/aiClient.js'
+import { createAiClient, AiUnavailableError } from '../src/ai/aiClient.js'
 
 // A fake database and logger, so these tests need neither Postgres nor an API key.
 const silentLogger = { info() {}, warn() {}, error() {} }
@@ -47,7 +47,7 @@ const request = { purpose: 'classify', ticketId: null, params: {} }
 
 test('without an API key every call fails fast with AI_NOT_CONFIGURED', async () => {
   const { client } = buildClient(null)
-  await assert.rejects(client.call(request), (error) => error instanceof AiError && error.code === 'AI_NOT_CONFIGURED')
+  await assert.rejects(client.call(request), (error) => error instanceof AiUnavailableError && error.code === 'AI_NOT_CONFIGURED')
   assert.equal(client.getStatus().configured, false)
 })
 
@@ -141,4 +141,52 @@ test('a refusal is reported but does not count towards the circuit breaker', asy
     await assert.rejects(client.call(request), (error) => error.code === 'AI_REFUSED')
   }
   assert.equal(client.getStatus().circuitOpen, false)
+})
+
+test('after the pause exactly one trial call is allowed; success closes the circuit', async () => {
+  const sdk = fakeSdk([badRequest, badRequest, badRequest, okMessage])
+  const { client, clock } = buildClient(sdk)
+  for (let attempt = 0; attempt < 3; attempt++) await assert.rejects(client.call(request))
+  assert.equal(client.getStatus().circuit, 'open')
+
+  clock.time += 61_000
+  assert.equal(client.getStatus().circuit, 'half_open')
+  await client.call(request)
+  assert.equal(client.getStatus().circuit, 'closed')
+})
+
+test('a failed trial call opens the circuit again straight away', async () => {
+  const sdk = fakeSdk([badRequest])
+  const { client, clock } = buildClient(sdk)
+  for (let attempt = 0; attempt < 3; attempt++) await assert.rejects(client.call(request))
+  clock.time += 61_000
+  await assert.rejects(client.call(request), (error) => error.code === 'AI_REQUEST_REJECTED')
+  assert.equal(client.getStatus().circuit, 'open')
+})
+
+test('only one trial runs at a time while half-open', async () => {
+  let calls = 0
+  let finishTrial
+  const sdk = {
+    messages: {
+      create: async () => {
+        calls += 1
+        if (calls <= 3) throw badRequest
+        // The 4th call (the trial) stays in flight until the test releases it
+        return new Promise((resolve) => { finishTrial = () => resolve(okMessage) })
+      },
+    },
+  }
+  const { client, clock } = buildClient(sdk)
+  for (let attempt = 0; attempt < 3; attempt++) await assert.rejects(client.call(request))
+  clock.time += 61_000
+
+  const trial = client.call(request)
+  // A second caller arrives while the trial is running: it must be refused
+  await assert.rejects(client.call(request), (error) => error.code === 'AI_CIRCUIT_OPEN')
+  assert.equal(calls, 4)
+
+  finishTrial()
+  await trial
+  assert.equal(client.getStatus().circuit, 'closed')
 })

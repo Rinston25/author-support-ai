@@ -1,9 +1,9 @@
 import {
   listTicketsSchema, statsSchema, getTicketSchema, patchTicketSchema, assignToMeSchema,
-  sendResponseSchema, addNoteSchema, listUsersSchema,
+  sendResponseSchema, addNoteSchema, listUsersSchema, reclassifySchema,
 } from './schemas.js'
 import {
-  getQueue, getStats, getTicketDetail, changeTicket, assignToMe, sendResponse, addNote, listAdmins,
+  getQueue, getStats, getTicketDetail, changeTicket, assignToMe, sendResponse, addNote, listAdmins, reclassify,
 } from './service.js'
 
 // Every route here is admin-only; admins can see all tickets.
@@ -38,6 +38,10 @@ export default async function adminRoutes(fastify) {
   fastify.post('/admin/tickets/:ticketId/notes', { schema: addNoteSchema, onRequest: adminOnly }, async (request, reply) => {
     const result = await addNote(fastify.db, request.params.ticketId, request.user.userId, request.body.body)
     return reply.code(201).send(result)
+  })
+
+  fastify.post('/admin/tickets/:ticketId/reclassify', { schema: reclassifySchema, onRequest: adminOnly }, async (request) => {
+    return reclassify(fastify, request.params.ticketId, Boolean(request.body?.force))
   })
 
   fastify.get('/admin/users', { schema: listUsersSchema, onRequest: adminOnly }, async () => {

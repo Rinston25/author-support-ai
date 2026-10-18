@@ -8,6 +8,7 @@ import aiPlugin from './plugins/ai.js'
 import authRoutes from './modules/auth/routes.js'
 import bookRoutes from './modules/books/routes.js'
 import ticketRoutes from './modules/tickets/routes.js'
+import { classifyPendingTickets } from './ai/classifier.js'
 import adminRoutes from './modules/admin/routes.js'
 import healthRoutes from './modules/health/routes.js'
 
@@ -29,6 +30,14 @@ export async function buildApp() {
   await app.register(bookRoutes, { prefix: '/api' })
   await app.register(ticketRoutes, { prefix: '/api' })
   await app.register(adminRoutes, { prefix: '/api' })
+
+  // Pick up tickets left unclassified by a crash. Not awaited: the server should
+  // start accepting requests straight away.
+  app.addHook('onReady', async () => {
+    setImmediate(() => {
+      classifyPendingTickets(app).catch((error) => app.log.error({ err: error }, 'pending classification failed'))
+    })
+  })
 
   return app
 }
