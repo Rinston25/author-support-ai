@@ -215,7 +215,7 @@ useTicketStream({
               <!-- Draft status line -->
               <div v-if="draftState === 'loading'" class="banner info" role="status">Drafting reply...</div>
               <div v-else-if="draftState === 'ready'" class="banner info">
-                <strong>AI draft — review before sending.</strong>
+                <strong>AI draft — review before sending.</strong><br>
                 <span class="small">
                   {{ draftInfo.cached ? 'Saved draft (no new AI call).' : 'Freshly generated.' }}
                   Based on this ticket's category policy and the author's real figures.
