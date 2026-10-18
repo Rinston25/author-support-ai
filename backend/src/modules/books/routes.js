@@ -5,11 +5,11 @@ import { listBooks, getBook } from './service.js'
 export default async function bookRoutes(fastify) {
   const authorOnly = fastify.requireRole('author')
 
-  fastify.get('/books', { schema: listBooksSchema, preHandler: authorOnly }, async (request) => {
+  fastify.get('/books', { schema: listBooksSchema, onRequest: authorOnly }, async (request) => {
     return listBooks(fastify.db, request.user.authorId)
   })
 
-  fastify.get('/books/:bookId', { schema: getBookSchema, preHandler: authorOnly }, async (request) => {
+  fastify.get('/books/:bookId', { schema: getBookSchema, onRequest: authorOnly }, async (request) => {
     return { book: await getBook(fastify.db, request.params.bookId, request.user.authorId) }
   })
 }

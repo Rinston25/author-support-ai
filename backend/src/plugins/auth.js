@@ -21,8 +21,9 @@ async function authPlugin(fastify) {
   }
   fastify.decorate('authenticate', authenticate)
 
-  // Returns a preHandler that checks the token AND the role in one step,
-  // so a route can't forget one of them: preHandler: fastify.requireRole('admin')
+  // Returns an onRequest hook (runs before body validation, so a missing token is
+  // always a 401, never a 400) that checks the token AND the role in one step,
+  // so a route can't forget one of them: onRequest: fastify.requireRole('admin')
   fastify.decorate('requireRole', (requiredRole) => async (request) => {
     await authenticate(request)
     if (request.user.role !== requiredRole) {

@@ -22,12 +22,12 @@ export async function insertTicket(client, { authorId, bookId, subject, descript
   return result.rows[0].id
 }
 
-export async function insertMessage(client, { ticketId, senderUserId, senderRole, body }) {
+export async function insertMessage(client, { ticketId, senderUserId, senderRole, body, aiAssisted = false }) {
   const result = await client.query(
-    `INSERT INTO ticket_messages (ticket_id, sender_user_id, sender_role, body)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO ticket_messages (ticket_id, sender_user_id, sender_role, body, ai_assisted)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id, sender_role AS "senderRole", body, created_at AS "createdAt"`,
-    [ticketId, senderUserId, senderRole, body],
+    [ticketId, senderUserId, senderRole, body, aiAssisted],
   )
   return result.rows[0]
 }

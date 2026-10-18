@@ -8,7 +8,7 @@ export default async function authRoutes(fastify) {
     return login(fastify, email, password)
   })
 
-  fastify.get('/auth/me', { schema: meSchema, preHandler: fastify.authenticate }, async (request) => {
+  fastify.get('/auth/me', { schema: meSchema, onRequest: fastify.authenticate }, async (request) => {
     return { user: await getCurrentUser(fastify, request.user.userId) }
   })
 }

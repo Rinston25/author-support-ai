@@ -6,7 +6,11 @@ const QUEUE_FROM = `
   FROM tickets t
   JOIN authors a ON a.id = t.author_id
   LEFT JOIN books b ON b.id = t.book_id
-  LEFT JOIN users assignee ON assignee.id = t.assigned_to`
+  LEFT JOIN users assignee ON assignee.id = t.assigned_to
+  LEFT JOIN LATERAL (
+    SELECT sender_role FROM ticket_messages
+    WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1
+  ) last_message ON true`
 
 // Turns the validated query filters into a WHERE clause with $1, $2... placeholders.
 // Only values are parameterised; column names below are fixed strings, never user input.
@@ -35,18 +39,19 @@ function buildWhere(filters, adminId) {
     const escaped = filters.q.replace(/[\\%_]/g, (character) => `\\${character}`)
     values.push(`%${escaped}%`)
     const placeholder = `$${values.length}`
-    conditions.push(`(t.subject ILIKE ${placeholder} OR t.description ILIKE ${placeholder} OR a.name ILIKE ${placeholder})`)
+    conditions.push(`(t.subject ILIKE ${placeholder} OR t.description ILIKE ${placeholder}
+      OR a.name ILIKE ${placeholder} OR b.title ILIKE ${placeholder})`)
   }
 
   const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
   return { whereSql, values }
 }
 
-// Position in PRIORITIES = urgency. A ticket still being classified is treated
-// like "medium" so it doesn't sink to the bottom or jump to the top.
+// Position in PRIORITIES = urgency (critical first). A ticket whose priority is
+// still null (being classified) sorts after "low".
 const PRIORITY_RANK_SQL = `CASE t.priority
   ${PRIORITIES.map((priority, index) => `WHEN '${priority}' THEN ${index}`).join('\n  ')}
-  ELSE ${PRIORITIES.indexOf('medium')} END`
+  ELSE ${PRIORITIES.length} END`
 
 const SORT_SQL = {
   // Unresolved first, then most urgent, then oldest first
@@ -63,14 +68,16 @@ export async function listQueueTickets(db, filters, adminId) {
             t.classification_status AS "classificationStatus",
             t.category_source AS "categorySource",
             t.priority_source AS "prioritySource",
-            t.author_id AS "authorId", a.name AS "authorName",
-            t.book_id AS "bookId", b.title AS "bookTitle",
-            t.assigned_to AS "assignedToId", assignee.name AS "assignedToName",
+            a.name AS "authorName",
+            COALESCE(b.title, 'General / Account Level') AS "bookTitle",
+            t.assigned_to AS "assigneeId", assignee.name AS "assigneeName",
             t.created_at AS "createdAt", t.updated_at AS "updatedAt",
-            floor(extract(epoch FROM (now() - t.created_at)))::int AS "ageSeconds"
+            floor(extract(epoch FROM (now() - t.created_at)) / 60)::int AS "ageMinutes",
+            last_message.sender_role AS "lastMessageFrom",
+            COALESCE(last_message.sender_role = 'author', false) AS "awaitingReply"
      ${QUEUE_FROM}
      ${whereSql}
-     ORDER BY ${SORT_SQL[filters.sort]}
+     ORDER BY ${SORT_SQL[filters.sort]}, t.id
      LIMIT ${filters.pageSize} OFFSET ${offset}`,
     values,
   )
@@ -90,9 +97,15 @@ export async function getQueueStats(db) {
     db.query(`SELECT COALESCE(priority, 'unclassified') AS priority, count(*)::int AS count
               FROM tickets WHERE status IN ('open', 'in_progress') GROUP BY 1`),
     db.query(`SELECT
-                count(*) FILTER (WHERE assigned_to IS NULL)::int AS "unassigned",
-                floor(extract(epoch FROM (now() - min(created_at))))::int AS "oldestAgeSeconds"
-              FROM tickets WHERE status IN ('open', 'in_progress')`),
+                count(*) FILTER (WHERE t.assigned_to IS NULL)::int AS "unassigned",
+                count(*) FILTER (WHERE last_message.sender_role = 'author')::int AS "awaitingReply",
+                floor(extract(epoch FROM (now() - min(t.created_at))) / 60)::int AS "oldestOpenAgeMinutes"
+              FROM tickets t
+              LEFT JOIN LATERAL (
+                SELECT sender_role FROM ticket_messages
+                WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1
+              ) last_message ON true
+              WHERE t.status IN ('open', 'in_progress')`),
   ])
   return { byStatus: byStatus.rows, byPriority: byPriority.rows, ...other.rows[0] }
 }
@@ -105,11 +118,13 @@ export async function findTicketById(db, ticketId) {
             t.priority_source AS "prioritySource",
             t.ai_reasoning AS "aiReasoning",
             t.author_id AS "authorId", t.book_id AS "bookId",
-            t.assigned_to AS "assignedToId", assignee.name AS "assignedToName",
+            COALESCE(b.title, 'General / Account Level') AS "bookTitle",
+            t.assigned_to AS "assigneeId", assignee.name AS "assigneeName",
             t.created_at AS "createdAt", t.updated_at AS "updatedAt",
             t.first_response_at AS "firstResponseAt", t.resolved_at AS "resolvedAt",
-            floor(extract(epoch FROM (now() - t.created_at)))::int AS "ageSeconds"
+            floor(extract(epoch FROM (now() - t.created_at)) / 60)::int AS "ageMinutes"
      FROM tickets t
+     LEFT JOIN books b ON b.id = t.book_id
      LEFT JOIN users assignee ON assignee.id = t.assigned_to
      WHERE t.id = $1`,
     [ticketId],
@@ -150,8 +165,33 @@ export async function listNotes(db, ticketId) {
   return result.rows
 }
 
+export async function insertNote(db, { ticketId, adminUserId, body }) {
+  const result = await db.query(
+    `INSERT INTO internal_notes (ticket_id, admin_user_id, body) VALUES ($1, $2, $3)
+     RETURNING id, body, created_at AS "createdAt"`,
+    [ticketId, adminUserId, body],
+  )
+  return result.rows[0]
+}
+
+export async function listAdminUsers(db) {
+  const result = await db.query(`SELECT id, name, email FROM users WHERE role = 'admin' ORDER BY name`)
+  return result.rows
+}
+
 export async function findAdminUser(db, userId) {
   const result = await db.query(`SELECT id FROM users WHERE id = $1 AND role = 'admin'`, [userId])
+  return result.rows[0] || null
+}
+
+// Locks the row so two admins replying at once can't both set first_response_at.
+export async function lockTicketForUpdate(client, ticketId) {
+  const result = await client.query(
+    `SELECT id, status, author_id AS "authorId", assigned_to AS "assignedTo",
+            first_response_at AS "firstResponseAt", resolved_at AS "resolvedAt"
+     FROM tickets WHERE id = $1 FOR UPDATE`,
+    [ticketId],
+  )
   return result.rows[0] || null
 }
 
@@ -163,11 +203,13 @@ const UPDATABLE_COLUMNS = {
   assignedTo: 'assigned_to',
   categorySource: 'category_source',
   prioritySource: 'priority_source',
+  classificationStatus: 'classification_status',
+  firstResponseAt: 'first_response_at',
   resolvedAt: 'resolved_at',
 }
 
 // `changes` uses the keys above. The value `undefined` means "leave alone";
-// null is a real value (e.g. un-assign).
+// null is a real value (e.g. un-assign). `db` may be a pool or a transaction client.
 export async function updateTicket(db, ticketId, changes) {
   const assignments = []
   const values = [ticketId]
