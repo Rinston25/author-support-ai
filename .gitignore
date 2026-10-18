@@ -1,0 +1,16 @@
+# Secrets: the API key and JWT secret only ever live in backend/.env
+.env
+.env.*
+!.env.example
+
+node_modules/
+.nuxt/
+.output/
+dist/
+*.log
+
+# The assignment brief is confidential; keep it out of the repo
+FULLSTACK-ASSIGNMENT*.pdf
+
+# Raw dataset from the assignment; seed.js reads it from the repo root (or SEED_DATA_PATH)
+bookleaf_sample_data.json
