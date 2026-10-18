@@ -22,11 +22,26 @@ const bookSchema = {
   },
 }
 
+const royaltySummarySchema = {
+  type: 'object',
+  description: "Author-level totals. The 1,000 minimum payout applies to the author's total pending, not per book.",
+  properties: {
+    totalPending: { type: 'integer' },
+    nextPayoutDate: { type: ['string', 'null'] },
+    belowPayoutThreshold: { type: 'boolean' },
+  },
+}
+
 export const listBooksSchema = {
   tags: ['Books'],
   summary: "List the logged-in author's books",
   security: [{ bearerAuth: [] }],
-  response: { 200: { type: 'object', properties: { books: { type: 'array', items: bookSchema } } } },
+  response: {
+    200: {
+      type: 'object',
+      properties: { summary: royaltySummarySchema, books: { type: 'array', items: bookSchema } },
+    },
+  },
 }
 
 export const getBookSchema = {

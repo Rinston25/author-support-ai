@@ -33,3 +33,11 @@ export async function findBookForAuthor(db, bookId, authorId) {
   )
   return result.rows[0] || null
 }
+
+export async function sumPendingRoyalty(db, authorId) {
+  const result = await db.query(
+    'SELECT COALESCE(SUM(royalty_pending), 0)::int AS total FROM books WHERE author_id = $1',
+    [authorId],
+  )
+  return result.rows[0].total
+}

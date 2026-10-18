@@ -25,8 +25,18 @@ export function getNextPayoutDate(today = new Date()) {
   }
 }
 
-// True when there is something pending but it is under the minimum payout,
-// meaning it rolls over to the next quarter.
-export function isBelowPayoutThreshold(pendingRupees) {
-  return pendingRupees > 0 && pendingRupees < MINIMUM_PAYOUT_RUPEES
+// The 1,000 minimum applies to the author's TOTAL pending royalty across all
+// their books, not to each book. Below it, everything rolls over to next quarter.
+export function isBelowPayoutThreshold(totalPendingRupees) {
+  return totalPendingRupees > 0 && totalPendingRupees < MINIMUM_PAYOUT_RUPEES
+}
+
+// Author-level royalty facts shown above the book list.
+export function buildRoyaltySummary(totalPendingRupees, today = new Date()) {
+  return {
+    totalPending: totalPendingRupees,
+    // Nothing pending means there is no payout to look forward to
+    nextPayoutDate: totalPendingRupees > 0 ? getNextPayoutDate(today) : null,
+    belowPayoutThreshold: isBelowPayoutThreshold(totalPendingRupees),
+  }
 }

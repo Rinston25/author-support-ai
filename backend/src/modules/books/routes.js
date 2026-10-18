@@ -6,7 +6,7 @@ export default async function bookRoutes(fastify) {
   const authorOnly = fastify.requireRole('author')
 
   fastify.get('/books', { schema: listBooksSchema, preHandler: authorOnly }, async (request) => {
-    return { books: await listBooks(fastify.db, request.user.authorId) }
+    return listBooks(fastify.db, request.user.authorId)
   })
 
   fastify.get('/books/:bookId', { schema: getBookSchema, preHandler: authorOnly }, async (request) => {
