@@ -4,6 +4,7 @@ import { config } from './config.js'
 import dbPlugin from './plugins/db.js'
 import errorsPlugin from './plugins/errors.js'
 import authPlugin from './plugins/auth.js'
+import aiPlugin from './plugins/ai.js'
 import authRoutes from './modules/auth/routes.js'
 import bookRoutes from './modules/books/routes.js'
 import ticketRoutes from './modules/tickets/routes.js'
@@ -20,6 +21,7 @@ export async function buildApp() {
   await app.register(errorsPlugin)
   await app.register(dbPlugin)
   await app.register(authPlugin)
+  await app.register(aiPlugin)
 
   // Every route lives under /api
   await app.register(healthRoutes, { prefix: '/api' })
