@@ -23,9 +23,11 @@ npm run dev                          # API on http://localhost:3001, health at /
 - Admin: `admin@bookleaf.com` or `ops@bookleaf.com` / `Admin@123`
 - Author: any author email in the dataset, e.g. `priya.sharma@email.com` / `Author@123`
 
-The raw dataset (`bookleaf_sample_data.json`) is not committed. Put it in the repo root, or point `SEED_DATA_PATH` at it, before seeding.
+Copy the bookleaf_sample_data.json provided by BookLeaf into the repo root before running db:reset (or point `SEED_DATA_PATH` at it). It is deliberately not committed.
 
 ## Architecture
+- Money is stored as whole-rupee integers: the dataset has no paise, and integers avoid float rounding issues.
+
 TODO
 
 ## AI integration

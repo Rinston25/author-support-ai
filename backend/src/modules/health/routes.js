@@ -15,7 +15,7 @@ export default async function healthRoutes(fastify) {
             database: { type: 'string' },
             ai: { type: 'object', properties: { configured: { type: 'boolean' } } },
           },
-          example: { status: 'ok', database: 'up', ai: { configured: true } },
+          examples: [{ status: 'ok', database: 'up', ai: { configured: true } }],
         },
       },
     },

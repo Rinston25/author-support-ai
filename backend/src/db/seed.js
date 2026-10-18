@@ -108,6 +108,11 @@ const demoTickets = [
 ]
 
 async function seed() {
+  if (!fs.existsSync(dataPath)) {
+    console.error(`Cannot find the sample dataset at ${dataPath}`)
+    console.error('Copy the bookleaf_sample_data.json provided by BookLeaf into the repo root, or set SEED_DATA_PATH.')
+    process.exit(1)
+  }
   const dataset = JSON.parse(fs.readFileSync(dataPath, 'utf8'))
   const client = new pg.Client({ connectionString: config.databaseUrl })
   await client.connect()
