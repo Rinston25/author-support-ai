@@ -11,6 +11,7 @@
     "start": "node --env-file=.env src/server.js",
     "db:migrate": "node --env-file=.env src/db/migrate.js",
     "db:seed": "node --env-file=.env src/db/seed.js",
+    "ai:eval": "node --env-file=.env scripts/ai-eval.js",
     "db:reset": "node --env-file=.env src/db/migrate.js --reset && node --env-file=.env src/db/seed.js",
     "test": "node --env-file=.env --test \"test/**/*.test.js\""
   },
