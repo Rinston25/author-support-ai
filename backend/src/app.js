@@ -6,6 +6,7 @@ import errorsPlugin from './plugins/errors.js'
 import authPlugin from './plugins/auth.js'
 import authRoutes from './modules/auth/routes.js'
 import bookRoutes from './modules/books/routes.js'
+import ticketRoutes from './modules/tickets/routes.js'
 import healthRoutes from './modules/health/routes.js'
 
 // Builds the app without starting it, so tests can import it directly.
@@ -23,6 +24,7 @@ export async function buildApp() {
   await app.register(healthRoutes, { prefix: '/api' })
   await app.register(authRoutes, { prefix: '/api' })
   await app.register(bookRoutes, { prefix: '/api' })
+  await app.register(ticketRoutes, { prefix: '/api' })
 
   return app
 }
