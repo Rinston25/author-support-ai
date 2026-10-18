@@ -1,3 +1,4 @@
 <template>
-  <main><h1>BookLeaf Author Support</h1></main>
+  <!-- The auth middleware sends everyone to their own home page before this shows -->
+  <LoadingState />
 </template>
